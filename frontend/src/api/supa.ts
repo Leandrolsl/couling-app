@@ -2,20 +2,12 @@ import { supabase } from "@/src/lib/supabase";
 
 export type Profile = {
   id: string;
-  phone: string;
+  phone: string | null;
+  email: string | null;
   name: string;
   avatar: string;
   is_online?: boolean;
   last_seen?: string;
-};
-
-export type ContactRow = {
-  id: string;
-  owner_id: string;
-  contact_user_id: string;
-  display_name: string;
-  created_at: string;
-  profile?: Profile;
 };
 
 export type Message = {
@@ -39,30 +31,73 @@ export type Chat = {
   created_at: string;
 };
 
-// ---------- auth ----------
-export async function signInDemo(phone: string) {
-  // Demo OTP flow: anon sign-in then upsert profile with phone.
-  // This preserves the existing UX while using REAL Supabase JWT + RLS.
-  // Returning users on the SAME DEVICE keep their session; new device = new identity.
-  const session = await supabase.auth.getSession();
-  if (!session.data.session) {
-    const { error } = await supabase.auth.signInAnonymously();
-    if (error) throw error;
-  }
-  const user = (await supabase.auth.getUser()).data.user;
-  if (!user) throw new Error("Could not establish session");
+export type Meeting = {
+  id: string;
+  code: string;
+  title: string;
+  organizer_id: string;
+  participants: string[];
+  muted: string[];
+  all_muted: boolean;
+  private_talk: { members: string[]; started_at: string } | null;
+  status: "live" | "ended";
+  created_at: string;
+};
 
-  // Upsert profile with phone (idempotent)
-  const { error: upErr } = await supabase
-    .from("profiles")
-    .upsert(
-      { id: user.id, phone, is_online: true, last_seen: new Date().toISOString() },
-      { onConflict: "id" },
-    );
+// ---------- email auth (current) ----------
+export async function signUpWithEmail(email: string, password: string) {
+  const { data, error } = await supabase.auth.signUp({
+    email: email.trim().toLowerCase(),
+    password,
+  });
+  if (error) throw error;
+  const user = data.user;
+  if (!user) throw new Error("Sign-up succeeded but no user returned. Check email confirmation settings.");
+  // Bootstrap profile row (id == auth user id)
+  const { error: upErr } = await supabase.from("profiles").upsert(
+    {
+      id: user.id,
+      email: email.trim().toLowerCase(),
+      is_online: true,
+      last_seen: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
   if (upErr) throw upErr;
   return user;
 }
 
+export async function signInWithEmail(email: string, password: string) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password,
+  });
+  if (error) throw error;
+  const user = data.user;
+  if (!user) throw new Error("Sign-in succeeded but no user returned.");
+  // Ensure profile exists (idempotent)
+  await supabase.from("profiles").upsert(
+    {
+      id: user.id,
+      email: email.trim().toLowerCase(),
+      is_online: true,
+      last_seen: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+  return user;
+}
+
+// ---------- phone auth (FUTURE — placeholder so screens compile) ----------
+export async function startPhoneOtp(_phone: string): Promise<void> {
+  throw new Error("Phone/SMS login is coming soon — please use email for now.");
+}
+
+export async function verifyPhoneOtp(_phone: string, _code: string): Promise<void> {
+  throw new Error("Phone/SMS login is coming soon — please use email for now.");
+}
+
+// ---------- profile ----------
 export async function getCurrentProfile(): Promise<Profile | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
@@ -86,6 +121,9 @@ export async function updateProfile(name: string, avatar: string) {
 }
 
 export async function signOut() {
+  try {
+    await heartbeat(false);
+  } catch {}
   await supabase.auth.signOut();
 }
 
@@ -99,20 +137,20 @@ export async function heartbeat(online: boolean) {
     .eq("id", user.id);
 }
 
-// ---------- contacts ----------
-export async function addContactByPhone(phone: string, displayName: string) {
+// ---------- contacts (look up by EMAIL — phone is future) ----------
+export async function addContactByEmail(email: string, displayName: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
-  if (phone === user.phone) throw new Error("Cannot add yourself");
 
+  const normalized = email.trim().toLowerCase();
   const { data: targetRow, error: lookupErr } = await supabase
     .from("profiles")
-    .select("id, phone")
-    .eq("phone", phone)
+    .select("id, email")
+    .eq("email", normalized)
     .maybeSingle();
   if (lookupErr) throw lookupErr;
   if (!targetRow) {
-    throw new Error("No Couling user found with that phone. Ask them to join.");
+    throw new Error("No Couling user found with that email. Ask them to join.");
   }
   if (targetRow.id === user.id) throw new Error("Cannot add yourself");
 
@@ -122,7 +160,7 @@ export async function addContactByPhone(phone: string, displayName: string) {
     display_name: displayName,
   });
   if (error) {
-    if (error.code === "23505") throw new Error("Already in contacts");
+    if (error.code === "23505") throw new Error("Already in your Circle");
     throw error;
   }
 }
@@ -174,7 +212,6 @@ export async function startChatWithContact(contactId: string) {
   if (!contact) throw new Error("Contact not found");
 
   const chatId = chatIdFor(user.id, contact.contact_user_id);
-  // upsert chat row (idempotent)
   const { error: upErr } = await supabase
     .from("chats")
     .upsert(
@@ -209,7 +246,6 @@ export async function listChats() {
     .in("id", otherIds);
   const profMap = new Map<string, any>((profs || []).map((p: any) => [p.id, p]));
 
-  // contacts for display name override
   const { data: cts } = await supabase
     .from("contacts")
     .select("contact_user_id, display_name")
@@ -248,16 +284,13 @@ export async function getMessages(chatId: string) {
   const chat = await getChat(chatId);
   if (!chat) return { messages: [], chat: null };
 
-  // Auto-purge expired (best-effort; mirror server-side logic on client only)
-  // Real purge would need a server function; for now we just filter visibility.
   const clearedAt = (chat.cleared_at || {})[user.id];
 
-  let q = supabase
+  const { data, error } = await supabase
     .from("messages")
     .select("*")
     .eq("chat_id", chatId)
     .order("created_at", { ascending: true });
-  const { data, error } = await q;
   if (error) throw error;
   const visible = (data as Message[]).filter((m) => {
     if ((m.hidden_for || []).includes(user.id)) return false;
@@ -280,7 +313,6 @@ export async function sendMessage(chatId: string, text: string) {
     .select()
     .single();
   if (error) throw error;
-  // update chat preview
   await supabase
     .from("chats")
     .update({ last_message: text.slice(0, 120), last_at: new Date().toISOString() })
@@ -337,6 +369,287 @@ export async function setDisappearing(chatId: string, seconds: number | null) {
   if (error) throw error;
 }
 
+// ---------- calls (log) ----------
+export async function initiateCall(contactId: string, type: "voice" | "video") {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data: contact, error: cErr } = await supabase
+    .from("contacts")
+    .select("contact_user_id, display_name")
+    .eq("id", contactId)
+    .eq("owner_id", user.id)
+    .maybeSingle();
+  if (cErr) throw cErr;
+  if (!contact) throw new Error("Contact not found");
+
+  const { data: target } = await supabase
+    .from("profiles")
+    .select("id, avatar")
+    .eq("id", contact.contact_user_id)
+    .maybeSingle();
+
+  const { data: call, error } = await supabase
+    .from("calls")
+    .insert({
+      caller_id: user.id,
+      callee_id: contact.contact_user_id,
+      type,
+      status: "initiated",
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return {
+    call_id: call.id,
+    type,
+    peer: {
+      id: target?.id || contact.contact_user_id,
+      display_name: contact.display_name,
+      avatar: target?.avatar || "",
+    },
+  };
+}
+
+export async function listCalls() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data: rows, error } = await supabase
+    .from("calls")
+    .select("*")
+    .or(`caller_id.eq.${user.id},callee_id.eq.${user.id}`)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  if (!rows || rows.length === 0) return [];
+
+  const otherIds = Array.from(
+    new Set(rows.map((c: any) => (c.caller_id === user.id ? c.callee_id : c.caller_id))),
+  );
+  const { data: profs } = await supabase
+    .from("profiles")
+    .select("id, name, avatar")
+    .in("id", otherIds);
+  const profMap = new Map<string, any>((profs || []).map((p: any) => [p.id, p]));
+
+  const { data: cts } = await supabase
+    .from("contacts")
+    .select("contact_user_id, display_name")
+    .eq("owner_id", user.id);
+  const ctMap = new Map<string, string>((cts || []).map((c: any) => [c.contact_user_id, c.display_name]));
+
+  return rows.map((c: any) => {
+    const outgoing = c.caller_id === user.id;
+    const otherId = outgoing ? c.callee_id : c.caller_id;
+    const prof = profMap.get(otherId) || {};
+    return {
+      id: c.id,
+      type: c.type as "voice" | "video",
+      direction: outgoing ? "outgoing" : "incoming",
+      display_name: ctMap.get(otherId) || prof.name || "Couling User",
+      avatar: prof.avatar || "",
+      created_at: c.created_at,
+    };
+  });
+}
+
+// ---------- meetings ----------
+function genMeetingCode(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const block = () => Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+  return `${block()}-${block()}-${block()}`;
+}
+
+export async function createMeeting(title: string) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  // Retry once on unique-code collision
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const code = genMeetingCode();
+    const { data, error } = await supabase
+      .from("meetings")
+      .insert({
+        code,
+        title: title.trim() || "Couling Meeting",
+        organizer_id: user.id,
+        participants: [user.id],
+      })
+      .select()
+      .single();
+    if (!error) return data as Meeting;
+    if (error.code !== "23505") throw error;
+  }
+  throw new Error("Could not allocate meeting code, please retry.");
+}
+
+export async function joinMeeting(code: string) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const upper = code.trim().toUpperCase();
+  const { data: meeting, error } = await supabase
+    .from("meetings")
+    .select("*")
+    .eq("code", upper)
+    .maybeSingle();
+  if (error) throw error;
+  if (!meeting || meeting.status !== "live") {
+    throw new Error("Meeting not found or ended");
+  }
+
+  if (!meeting.participants.includes(user.id)) {
+    const next = [...meeting.participants, user.id];
+    const { error: upErr } = await supabase
+      .from("meetings")
+      .update({ participants: next })
+      .eq("id", meeting.id);
+    if (upErr) throw upErr;
+    meeting.participants = next;
+  }
+  return meeting as Meeting;
+}
+
+export async function listMeetings() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from("meetings")
+    .select("*")
+    .contains("participants", [user.id])
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data || []).map((m: any) => ({ ...m, is_organizer: m.organizer_id === user.id }));
+}
+
+export async function getMeeting(meetingId: string) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: meeting, error } = await supabase
+    .from("meetings")
+    .select("*")
+    .eq("id", meetingId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!meeting) throw new Error("Meeting not found");
+
+  // Resolve participants with profile + contact display name overrides
+  const { data: profs } = await supabase
+    .from("profiles")
+    .select("id, name, avatar")
+    .in("id", meeting.participants);
+  const profMap = new Map<string, any>((profs || []).map((p: any) => [p.id, p]));
+
+  const { data: cts } = await supabase
+    .from("contacts")
+    .select("contact_user_id, display_name")
+    .eq("owner_id", user.id);
+  const ctMap = new Map<string, string>((cts || []).map((c: any) => [c.contact_user_id, c.display_name]));
+
+  const participants_detail = meeting.participants.map((pid: string) => {
+    const prof = profMap.get(pid) || {};
+    const display =
+      pid === user.id
+        ? "You"
+        : ctMap.get(pid) || prof.name || "Couling User";
+    return {
+      user_id: pid,
+      display_name: display,
+      avatar: prof.avatar || "",
+      is_organizer: pid === meeting.organizer_id,
+      muted: (meeting.muted || []).includes(pid),
+    };
+  });
+
+  return {
+    ...meeting,
+    is_organizer: meeting.organizer_id === user.id,
+    participants_detail,
+  };
+}
+
+export async function muteAll(meetingId: string) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: meeting } = await supabase
+    .from("meetings").select("organizer_id, participants").eq("id", meetingId).maybeSingle();
+  if (!meeting) throw new Error("Meeting not found");
+  if (meeting.organizer_id !== user.id) throw new Error("Only organizer can mute all");
+  const muted = (meeting.participants || []).filter((p: string) => p !== user.id);
+  const { error } = await supabase
+    .from("meetings")
+    .update({ muted, all_muted: true })
+    .eq("id", meetingId);
+  if (error) throw error;
+}
+
+export async function unmuteAll(meetingId: string) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: meeting } = await supabase
+    .from("meetings").select("organizer_id").eq("id", meetingId).maybeSingle();
+  if (!meeting) throw new Error("Meeting not found");
+  if (meeting.organizer_id !== user.id) throw new Error("Only organizer can unmute all");
+  const { error } = await supabase
+    .from("meetings")
+    .update({ muted: [], all_muted: false })
+    .eq("id", meetingId);
+  if (error) throw error;
+}
+
+export async function startPrivateTalk(meetingId: string, participantIds: string[]) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: meeting } = await supabase
+    .from("meetings").select("organizer_id, participants").eq("id", meetingId).maybeSingle();
+  if (!meeting) throw new Error("Meeting not found");
+  if (meeting.organizer_id !== user.id) throw new Error("Only organizer can start private talk");
+  const ids = Array.from(new Set([user.id, ...participantIds]));
+  const invalid = ids.filter((p) => !meeting.participants.includes(p));
+  if (invalid.length > 0) throw new Error("Selected user not in meeting");
+  const pt = { members: ids, started_at: new Date().toISOString() };
+  const { error } = await supabase
+    .from("meetings")
+    .update({ private_talk: pt })
+    .eq("id", meetingId);
+  if (error) throw error;
+  return pt;
+}
+
+export async function endPrivateTalk(meetingId: string) {
+  const { error } = await supabase
+    .from("meetings")
+    .update({ private_talk: null })
+    .eq("id", meetingId);
+  if (error) throw error;
+}
+
+export async function endMeeting(meetingId: string) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: meeting } = await supabase
+    .from("meetings").select("organizer_id").eq("id", meetingId).maybeSingle();
+  if (!meeting) throw new Error("Meeting not found");
+  if (meeting.organizer_id !== user.id) throw new Error("Only organizer can end");
+  const { error } = await supabase
+    .from("meetings")
+    .update({ status: "ended" })
+    .eq("id", meetingId);
+  if (error) throw error;
+}
+
+export async function leaveMeeting(meetingId: string) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: meeting } = await supabase
+    .from("meetings").select("organizer_id, participants").eq("id", meetingId).maybeSingle();
+  if (!meeting) return;
+  const parts = (meeting.participants || []).filter((p: string) => p !== user.id);
+  const update: any = { participants: parts };
+  if (meeting.organizer_id === user.id) update.status = "ended";
+  await supabase.from("meetings").update(update).eq("id", meetingId);
+}
+
 // ---------- realtime helpers ----------
 export function subscribeChatMessages(chatId: string, onInsert: (m: Message) => void, onUpdate?: (m: Message) => void) {
   const channel = supabase
@@ -350,6 +663,18 @@ export function subscribeChatMessages(chatId: string, onInsert: (m: Message) => 
       "postgres_changes",
       { event: "UPDATE", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
       (payload) => onUpdate?.(payload.new as Message),
+    )
+    .subscribe();
+  return channel;
+}
+
+export function subscribeMeeting(meetingId: string, onUpdate: (m: any) => void) {
+  const channel = supabase
+    .channel(`meeting:${meetingId}`)
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "meetings", filter: `id=eq.${meetingId}` },
+      (payload) => onUpdate(payload.new),
     )
     .subscribe();
   return channel;

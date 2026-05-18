@@ -16,7 +16,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors, fonts, spacing, radius, ASSETS } from "@/src/theme";
 import Screen from "@/src/components/Screen";
 import GoldButton from "@/src/components/GoldButton";
-import { meetings as mAPI } from "@/src/api/client";
+import {
+  listMeetings,
+  createMeeting,
+  joinMeeting,
+} from "@/src/api/supa";
 
 export default function MeetingsTab() {
   const router = useRouter();
@@ -30,8 +34,8 @@ export default function MeetingsTab() {
 
   const load = useCallback(async () => {
     try {
-      const data: any = await mAPI.list();
-      setItems(data.meetings || []);
+      const data = await listMeetings();
+      setItems(data);
     } catch {}
   }, []);
 
@@ -41,12 +45,12 @@ export default function MeetingsTab() {
     if (!title.trim()) return Alert.alert("Couling", "Add a title");
     setLoading(true);
     try {
-      const data: any = await mAPI.create(title.trim());
+      const meeting = await createMeeting(title.trim());
       setShowCreate(false);
       setTitle("");
-      router.push({ pathname: "/meeting/[id]", params: { id: data.meeting.id } });
-    } catch (e: any) {
-      Alert.alert("Couling", e.message);
+      router.push({ pathname: "/meeting/[id]", params: { id: meeting.id } });
+    } catch (err: any) {
+      Alert.alert("Couling", err.message);
     } finally {
       setLoading(false);
     }
@@ -56,12 +60,12 @@ export default function MeetingsTab() {
     if (!joinCode.trim()) return Alert.alert("Couling", "Enter a meeting code");
     setLoading(true);
     try {
-      const data: any = await mAPI.join(joinCode.trim().toUpperCase());
+      const meeting = await joinMeeting(joinCode.trim().toUpperCase());
       setShowJoin(false);
       setJoinCode("");
-      router.push({ pathname: "/meeting/[id]", params: { id: data.meeting.id } });
-    } catch (e: any) {
-      Alert.alert("Couling", e.message);
+      router.push({ pathname: "/meeting/[id]", params: { id: meeting.id } });
+    } catch (err: any) {
+      Alert.alert("Couling", err.message);
     } finally {
       setLoading(false);
     }

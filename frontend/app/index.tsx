@@ -70,7 +70,7 @@ export default function Index() {
         <GoldButton
           testID="get-started-btn"
           label="Enter the Circle"
-          onPress={() => router.push("/auth/phone")}
+          onPress={() => router.push("/auth/email")}
         />
         <Text style={styles.legal}>
           By continuing you accept Couling's privacy-first terms.

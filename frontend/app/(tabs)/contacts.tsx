@@ -18,15 +18,19 @@ import Screen from "@/src/components/Screen";
 import Avatar from "@/src/components/Avatar";
 import GoldButton from "@/src/components/GoldButton";
 import HiddenNumberBadge from "@/src/components/HiddenNumberBadge";
-import { contacts as cAPI, chats as chAPI, calls as callAPI } from "@/src/api/client";
-import { listContacts as supaListContacts, addContactByPhone, startChatWithContact } from "@/src/api/supa";
+import {
+  listContacts as supaListContacts,
+  addContactByEmail,
+  startChatWithContact,
+  initiateCall,
+} from "@/src/api/supa";
 
 export default function ContactsTab() {
   const router = useRouter();
   const [items, setItems] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
-  const [phone, setPhone] = useState("+1");
+  const [emailValue, setEmailValue] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -40,16 +44,17 @@ export default function ContactsTab() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const onAdd = async () => {
-    if (!phone.trim() || phone.replace(/\D/g, "").length < 6) return Alert.alert("Couling", "Enter a valid phone");
+    const e = emailValue.trim().toLowerCase();
+    if (!e || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return Alert.alert("Couling", "Enter a valid email");
     if (!displayName.trim()) return Alert.alert("Couling", "Give them a display name");
     setLoading(true);
     try {
-      await addContactByPhone(phone.trim(), displayName.trim());
+      await addContactByEmail(e, displayName.trim());
       setShowAdd(false);
-      setPhone("+1"); setDisplayName("");
+      setEmailValue(""); setDisplayName("");
       load();
-    } catch (e: any) {
-      Alert.alert("Couling", e.message);
+    } catch (err: any) {
+      Alert.alert("Couling", err.message);
     } finally {
       setLoading(false);
     }
@@ -59,20 +64,20 @@ export default function ContactsTab() {
     try {
       const chatId = await startChatWithContact(item.id);
       router.push({ pathname: "/chat/[id]", params: { id: chatId, name: item.display_name, emoji: item.avatar } });
-    } catch (e: any) {
-      Alert.alert("Couling", e.message);
+    } catch (err: any) {
+      Alert.alert("Couling", err.message);
     }
   };
 
   const startCall = async (item: any, type: "voice" | "video") => {
     try {
-      const data: any = await callAPI.initiate(item.id, type);
+      const data: any = await initiateCall(item.id, type);
       router.push({
         pathname: "/call/[id]",
         params: { id: data.call_id, type, name: item.display_name, emoji: item.avatar },
       });
-    } catch (e: any) {
-      Alert.alert("Couling", e.message);
+    } catch (err: any) {
+      Alert.alert("Couling", err.message);
     }
   };
 
@@ -169,21 +174,23 @@ export default function ContactsTab() {
           <View style={styles.modalCard}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalEyebrow}>EXPAND CIRCLE</Text>
-            <Text style={styles.modalTitle}>Add by phone number</Text>
+            <Text style={styles.modalTitle}>Add by email</Text>
             <Text style={styles.modalNote}>
-              The number disappears the moment they're added. From then on, only their display name exists.
+              We use email to find them on Couling, but it's <Text style={{ color: colors.gold }}>never shown</Text> to anyone in your Circle — only the display name you pick.
             </Text>
 
-            <Text style={styles.label}>Phone</Text>
+            <Text style={styles.label}>Email</Text>
             <View style={styles.inputWrap}>
               <TextInput
-                testID="add-phone-input"
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="+1 000 000 0000"
+                testID="add-email-input"
+                value={emailValue}
+                onChangeText={setEmailValue}
+                placeholder="them@private.club"
                 placeholderTextColor={colors.textDim}
                 style={styles.input}
-                keyboardType="phone-pad"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
               />
             </View>
 

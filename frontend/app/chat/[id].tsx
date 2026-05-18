@@ -24,9 +24,13 @@ import Avatar from "@/src/components/Avatar";
 import HiddenNumberBadge from "@/src/components/HiddenNumberBadge";
 import ConfirmDialog, { ConfirmAction } from "@/src/components/ConfirmDialog";
 import {
-  getMessages, sendMessage, deleteMessage as supaDeleteMessage,
-  clearChat, setDisappearing as supaSetDisappearing,
-  subscribeChatMessages, subscribePresence,
+  getMessages,
+  sendMessage,
+  deleteMessage as supaDeleteMessage,
+  clearChat,
+  setDisappearing as supaSetDisappearing,
+  subscribeChatMessages,
+  subscribePresence,
   getCurrentProfile,
 } from "@/src/api/supa";
 import { supabase } from "@/src/lib/supabase";
@@ -68,6 +72,7 @@ export default function ChatScreen() {
   const [me, setMe] = useState<any>(null);
   const [text, setText] = useState("");
   const [chatMeta, setChatMeta] = useState<any>(null);
+  const [peerOnline, setPeerOnline] = useState(false);
   const [selected, setSelected] = useState<Message | null>(null);
   const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const [showTimerSheet, setShowTimerSheet] = useState(false);
@@ -86,8 +91,11 @@ export default function ChatScreen() {
 
   const load = async () => {
     try {
-      const [meData, msgData]: any = await Promise.all([auth.me(), chats.messages(id as string)]);
-      setMe(meData.user);
+      const [profile, msgData] = await Promise.all([
+        getCurrentProfile(),
+        getMessages(id as string),
+      ]);
+      setMe(profile);
       setMessages(msgData.messages || []);
       setChatMeta(msgData.chat || null);
     } catch (e: any) {
@@ -95,18 +103,54 @@ export default function ChatScreen() {
     }
   };
 
-  useEffect(() => { load(); }, []);
-
   useEffect(() => {
-    const t = setInterval(async () => {
-      try {
-        const data: any = await chats.messages(id as string);
-        setMessages(data.messages || []);
-        setChatMeta(data.chat || null);
-      } catch {}
-    }, 3000);
-    return () => clearInterval(t);
+    load();
+  }, []);
+
+  // Realtime: subscribe to message inserts/updates
+  useEffect(() => {
+    if (!id) return;
+    const ch = subscribeChatMessages(
+      id as string,
+      (m) => {
+        setMessages((prev) => {
+          if (prev.some((x) => x.id === m.id)) return prev;
+          // Replace optimistic temp message if text matches & sender is me
+          const tempIdx = prev.findIndex(
+            (x) => x.id.startsWith("temp_") && x.sender_id === m.sender_id && x.text === m.text,
+          );
+          if (tempIdx >= 0) {
+            const next = prev.slice();
+            next[tempIdx] = m;
+            return next;
+          }
+          return [...prev, m];
+        });
+      },
+      (m) => {
+        setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...m } : x)));
+      },
+    );
+    return () => {
+      supabase.removeChannel(ch);
+    };
   }, [id]);
+
+  // Presence: track peer online status via realtime channel
+  useEffect(() => {
+    if (!id || !me?.id) return;
+    const ch = subscribePresence(
+      id as string,
+      { user_id: me.id, display_name: me.name || "Guest" },
+      (state) => {
+        const otherKeys = Object.keys(state).filter((k) => k !== me.id);
+        setPeerOnline(otherKeys.length > 0);
+      },
+    );
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [id, me?.id]);
 
   const onSend = async () => {
     const t = text.trim();
@@ -114,7 +158,10 @@ export default function ChatScreen() {
     setText("");
     const tempId = `temp_${Date.now()}`;
     const optim: Message = {
-      id: tempId, chat_id: id as string, sender_id: me?.id || "", text: t,
+      id: tempId,
+      chat_id: id as string,
+      sender_id: me?.id || "",
+      text: t,
       created_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, optim]);
@@ -131,7 +178,6 @@ export default function ChatScreen() {
   const deleteForMe = async (msg: Message) => {
     setSelected(null);
     closeAllSwipes();
-    // Optimistic local removal
     setMessages((prev) => prev.filter((m) => m.id !== msg.id));
     if (msg.id.startsWith("temp_")) return;
     try {
@@ -220,7 +266,7 @@ export default function ChatScreen() {
     setSelected(msg);
   };
 
-  const renderRightActions = (msg: Message) => (progress: any) => {
+  const renderRightActions = (_msg: Message) => (progress: any) => {
     const scale = progress.interpolate({
       inputRange: [0, 1], outputRange: [0.6, 1], extrapolate: "clamp",
     });
@@ -572,7 +618,7 @@ export default function ChatScreen() {
           </View>
         </View>
       </Modal>
-      {/* Universal confirm dialog (works in web preview & Expo Go alike) */}
+
       <ConfirmDialog
         visible={!!confirm}
         title={confirm?.title || ""}
@@ -694,11 +740,7 @@ const styles = StyleSheet.create({
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: colors.gold, alignItems: "center", justifyContent: "center",
   },
-
-  // Action sheet
-  actionBackdrop: {
-    flex: 1, backgroundColor: "rgba(0,0,0,0.65)", justifyContent: "flex-end",
-  },
+  actionBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.65)", justifyContent: "flex-end" },
   actionSheet: {
     backgroundColor: colors.surface1, borderTopLeftRadius: 28, borderTopRightRadius: 28,
     padding: spacing.lg, paddingBottom: 36,
@@ -725,8 +767,6 @@ const styles = StyleSheet.create({
   actionLabel: { fontFamily: fonts.bodyMed, fontSize: 15, color: colors.text },
   actionCancel: { alignSelf: "center", padding: 14, marginTop: spacing.sm },
   actionCancelText: { color: colors.textMuted, fontFamily: fonts.body, fontSize: 14 },
-
-  // Header menu dropdown
   menuBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
   menuCard: {
     position: "absolute", top: 90, right: 16,
@@ -741,8 +781,6 @@ const styles = StyleSheet.create({
   menuLabel: { fontFamily: fonts.bodyMed, fontSize: 14, color: colors.text },
   menuHint: { fontFamily: fonts.body, fontSize: 11, color: colors.textMuted, marginTop: 2 },
   menuDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginHorizontal: spacing.md },
-
-  // Timer sheet
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
   modalCard: {
     backgroundColor: colors.surface1, borderTopLeftRadius: 28, borderTopRightRadius: 28,
@@ -782,20 +820,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface2, borderRadius: radius.md,
     borderWidth: 1, borderColor: colors.border,
     paddingHorizontal: spacing.md, height: 44,
-  },
-  customInput: {
-    flex: 1, color: colors.text, fontFamily: fonts.bodyMed, fontSize: 16,
-  },
-  customUnit: { color: colors.textMuted, fontFamily: fonts.body, fontSize: 12 },
-  applyBtn: {
-    backgroundColor: colors.gold, paddingHorizontal: 16, height: 44,
-    borderRadius: radius.md, alignItems: "center", justifyContent: "center",
-  },
-  applyBtnText: { color: "#0D0D0D", fontFamily: fonts.bodyBold, fontSize: 13 },
-  modalClose: { alignSelf: "center", marginTop: spacing.md, padding: 12 },
-  modalCloseText: { color: colors.textMuted, fontFamily: fonts.body, fontSize: 14 },
-});
-zontal: spacing.md, height: 44,
   },
   customInput: {
     flex: 1, color: colors.text, fontFamily: fonts.bodyMed, fontSize: 16,

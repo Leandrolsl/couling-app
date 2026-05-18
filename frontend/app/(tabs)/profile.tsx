@@ -14,7 +14,6 @@ import { colors, fonts, spacing, radius } from "@/src/theme";
 import Screen from "@/src/components/Screen";
 import Avatar from "@/src/components/Avatar";
 import HiddenNumberBadge from "@/src/components/HiddenNumberBadge";
-import { auth, clearToken } from "@/src/api/client";
 import { getCurrentProfile, signOut } from "@/src/api/supa";
 
 export default function ProfileTab() {
@@ -38,7 +37,7 @@ export default function ProfileTab() {
       { text: "Cancel", style: "cancel" },
       {
         text: "Sign out", style: "destructive",
-        onPress: async () => { await signOut(); await clearToken(); router.replace("/"); },
+        onPress: async () => { await signOut(); router.replace("/"); },
       },
     ]);
   };

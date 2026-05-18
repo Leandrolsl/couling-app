@@ -15,7 +15,17 @@ import { BlurView } from "expo-blur";
 import { colors, fonts, spacing, radius } from "@/src/theme";
 import Avatar from "@/src/components/Avatar";
 
-import { meetings as mAPI } from "@/src/api/client";
+import {
+  getMeeting,
+  muteAll,
+  unmuteAll,
+  startPrivateTalk,
+  endPrivateTalk,
+  endMeeting,
+  leaveMeeting,
+  subscribeMeeting,
+} from "@/src/api/supa";
+import { supabase } from "@/src/lib/supabase";
 
 export default function MeetingRoom() {
   const router = useRouter();
@@ -26,8 +36,8 @@ export default function MeetingRoom() {
 
   const load = async () => {
     try {
-      const data: any = await mAPI.get(id as string);
-      setMeeting(data.meeting);
+      const data = await getMeeting(id as string);
+      setMeeting(data);
     } catch (e: any) {
       Alert.alert("Couling", e.message);
       router.back();
@@ -36,10 +46,13 @@ export default function MeetingRoom() {
 
   useFocusEffect(useCallback(() => { load(); }, [id]));
 
-  // poll every 4s
+  // Realtime: refetch when meeting row changes
   useEffect(() => {
-    const t = setInterval(load, 4000);
-    return () => clearInterval(t);
+    if (!id) return;
+    const ch = subscribeMeeting(id as string, () => {
+      load();
+    });
+    return () => { supabase.removeChannel(ch); };
   }, [id]);
 
   if (!meeting) {
@@ -47,7 +60,6 @@ export default function MeetingRoom() {
   }
 
   const isOrganizer = meeting.is_organizer;
-  const others = meeting.participants_detail?.filter((p: any) => !p.is_organizer || true) || [];
 
   const toggleSelect = (uid: string) => {
     setSelected((s) =>
@@ -57,8 +69,8 @@ export default function MeetingRoom() {
 
   const onMuteAll = async () => {
     try {
-      if (meeting.all_muted) await mAPI.unmuteAll(meeting.id);
-      else await mAPI.muteAll(meeting.id);
+      if (meeting.all_muted) await unmuteAll(meeting.id);
+      else await muteAll(meeting.id);
       await load();
     } catch (e: any) {
       Alert.alert("Couling", e.message);
@@ -68,7 +80,7 @@ export default function MeetingRoom() {
   const onStartPrivateTalk = async () => {
     if (selected.length === 0) return Alert.alert("Couling", "Select at least one participant");
     try {
-      await mAPI.privateTalk(meeting.id, selected);
+      await startPrivateTalk(meeting.id, selected);
       setShowPrivateTalk(false);
       setSelected([]);
       await load();
@@ -79,7 +91,7 @@ export default function MeetingRoom() {
 
   const onEndPrivateTalk = async () => {
     try {
-      await mAPI.endPrivateTalk(meeting.id);
+      await endPrivateTalk(meeting.id);
       await load();
     } catch {}
   };
@@ -95,8 +107,8 @@ export default function MeetingRoom() {
           style: "destructive",
           onPress: async () => {
             try {
-              if (isOrganizer) await mAPI.end(meeting.id);
-              else await mAPI.leave(meeting.id);
+              if (isOrganizer) await endMeeting(meeting.id);
+              else await leaveMeeting(meeting.id);
             } catch {}
             router.back();
           },

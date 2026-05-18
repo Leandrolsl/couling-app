@@ -13,7 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors, fonts, spacing, radius, ASSETS } from "@/src/theme";
 import Screen from "@/src/components/Screen";
 import Avatar from "@/src/components/Avatar";
-import { calls } from "@/src/api/client";
+import { listCalls } from "@/src/api/supa";
 
 type Call = {
   id: string;
@@ -31,8 +31,8 @@ export default function CallsTab() {
 
   const load = useCallback(async () => {
     try {
-      const data: any = await calls.list();
-      setItems(data.calls || []);
+      const data = await listCalls();
+      setItems(data as Call[]);
     } catch {}
   }, []);
 

@@ -1,0 +1,177 @@
+{
+  "theme_and_archetype": {
+    "theme": "DARK",
+    "archetype": "5 (Jewel & Luxury)",
+    "description": "Premium private communication platform resembling an exclusive private club. Focus on privacy, scarcity, and high-end aesthetics.",
+    "primary_color": "#D4A437"
+  },
+  "colors": {
+    "base_background": "#0D0D0D",
+    "surface_level_1": "#1A1A1A",
+    "surface_level_2": "#262626",
+    "primary_accent": "#D4A437",
+    "primary_accent_hover": "#B8860B",
+    "primary_accent_dim": "rgba(212, 164, 55, 0.15)",
+    "text_primary": "#F2F2F2",
+    "text_secondary": "#A3A3A3",
+    "border_subtle": "rgba(255, 255, 255, 0.1)",
+    "error": "#FF4D4D",
+    "success": "#32CD32"
+  },
+  "typography": {
+    "primary_font": "Cormorant Garamond",
+    "secondary_font": "Outfit",
+    "expo_packages": [
+      "@expo-google-fonts/cormorant-garamond",
+      "@expo-google-fonts/outfit"
+    ],
+    "hierarchy": {
+      "h1": {
+        "fontFamily": "CormorantGaramond_600SemiBold",
+        "fontSize": 40,
+        "letterSpacing": -1
+      },
+      "h2": {
+        "fontFamily": "CormorantGaramond_600SemiBold",
+        "fontSize": 32,
+        "letterSpacing": -0.5
+      },
+      "h3": {
+        "fontFamily": "Outfit_500Medium",
+        "fontSize": 24
+      },
+      "body_large": {
+        "fontFamily": "Outfit_400Regular",
+        "fontSize": 18
+      },
+      "body": {
+        "fontFamily": "Outfit_400Regular",
+        "fontSize": 16
+      },
+      "caption": {
+        "fontFamily": "Outfit_400Regular",
+        "fontSize": 14,
+        "letterSpacing": 0.5,
+        "textTransform": "uppercase"
+      }
+    }
+  },
+  "spacing_and_layout": {
+    "scale": {
+      "xs": 4,
+      "sm": 8,
+      "md": 16,
+      "lg": 24,
+      "xl": 32,
+      "2xl": 48,
+      "3xl": 64
+    },
+    "screen_padding": 24,
+    "border_radius": {
+      "sm": 8,
+      "md": 16,
+      "lg": 24,
+      "pill": 9999
+    }
+  },
+  "component_patterns": {
+    "bottom_navigation": {
+      "background": "rgba(13, 13, 13, 0.85)",
+      "effect": "BlurView (dark)",
+      "active_tint": "#D4A437",
+      "inactive_tint": "#A3A3A3",
+      "border_top": "1px solid rgba(255, 255, 255, 0.05)"
+    },
+    "chat_bubbles": {
+      "sender": {
+        "backgroundColor": "rgba(212, 164, 55, 0.1)",
+        "borderColor": "#D4A437",
+        "borderWidth": 1,
+        "borderTopRightRadius": 4,
+        "borderTopLeftRadius": 24,
+        "borderBottomLeftRadius": 24,
+        "borderBottomRightRadius": 24,
+        "textColor": "#F2F2F2"
+      },
+      "receiver": {
+        "backgroundColor": "#1A1A1A",
+        "borderTopLeftRadius": 4,
+        "borderTopRightRadius": 24,
+        "borderBottomLeftRadius": 24,
+        "borderBottomRightRadius": 24,
+        "textColor": "#F2F2F2"
+      }
+    },
+    "meeting_grid": {
+      "tile_background": "#1A1A1A",
+      "tile_border_radius": 24,
+      "gap": 16,
+      "active_speaker_border": "2px solid #D4A437"
+    },
+    "organizer_controls": {
+      "layout": "floating bottom bar",
+      "background": "rgba(26, 26, 26, 0.8)",
+      "effect": "BlurView",
+      "border_radius": 9999,
+      "padding_horizontal": 24,
+      "padding_vertical": 16
+    },
+    "otp_input": {
+      "style": "underlined",
+      "active_color": "#D4A437",
+      "inactive_color": "rgba(255, 255, 255, 0.2)",
+      "font_size": 32,
+      "font_family": "Outfit_500Medium"
+    },
+    "hidden_number_badge": {
+      "background": "rgba(212, 164, 55, 0.15)",
+      "text_color": "#D4A437",
+      "icon": "lock-closed",
+      "border_radius": 16,
+      "padding": "4px 12px"
+    }
+  },
+  "motion_and_interaction": {
+    "navigation_transition": "Fade through",
+    "button_press": "Scale down to 0.95 with spring animation (e.g. react-native-reanimated or Animated API)",
+    "modal_reveal": "Slide up from bottom with subtle blur backdrop"
+  },
+  "icons_and_assets": {
+    "library": "@expo/vector-icons",
+    "family": "Feather or Ionicons"
+  },
+  "media": {
+    "images": [
+      {
+        "category": "splash_hero",
+        "url": "https://static.prod-images.emergentagent.com/jobs/96804931-6e3f-456d-8cf3-b32199e2b2c9/images/2731719e73b62861a24a9f7edaf57a9474421ef4e642ed0ecac9aff3751f2126.png",
+        "description": "Minimalist 3D abstract composition with glowing gold thread on dark background for onboarding"
+      },
+      {
+        "category": "empty_contacts",
+        "url": "https://static.prod-images.emergentagent.com/jobs/96804931-6e3f-456d-8cf3-b32199e2b2c9/images/d8a6c131bb855e45fbeedf337b4422b172dd45b478a51e08b046c9e449500b6f.png",
+        "description": "Abstract minimalist golden contacts symbol for empty Contacts state"
+      },
+      {
+        "category": "empty_chats",
+        "url": "https://static.prod-images.emergentagent.com/jobs/96804931-6e3f-456d-8cf3-b32199e2b2c9/images/b569a4c67d97c14b03b333427a1b95d7f85340d3b0c8c59c7301c34ee96d95d2.png",
+        "description": "Overlapping transparent glass chat bubbles with gold rim for empty Chats state"
+      },
+      {
+        "category": "empty_meetings",
+        "url": "https://static.prod-images.emergentagent.com/jobs/96804931-6e3f-456d-8cf3-b32199e2b2c9/images/8c48370d864c98a7ac65ebcac9a5adaf653ceaf302a28370324e82da450d528d.png",
+        "description": "Connected golden nodes on obsidian background for empty Meetings state"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "This is a React Native Expo app. DO NOT USE Web APIs like HTML/CSS/Tailwind classnames directly unless using NativeWind.",
+    "Use StyleSheet or a library like NativeWind for styling. Stick to the provided exact hex colors. Never use generic blue/red/teal colors.",
+    "For the bottom navigation and top headers, apply `expo-blur` (BlurView) for a 'Crystal Glass' effect over scrolling content.",
+    "All interactive elements MUST include `testID` attribute (e.g., `testID=\"login-button\"`) as this is React Native, mapping to the 'data-testid' testing requirement.",
+    "Ensure the gold color (#D4A437) is used sparingly as an accent to indicate status, active states, and premium features.",
+    "Typography requires `@expo-google-fonts/cormorant-garamond` for Headings and `@expo-google-fonts/outfit` for Body. Ensure fonts are loaded in the root layout before rendering.",
+    "Keep standard RN UI elements styled: No default ugly inputs. Customize text inputs with bottom borders (OTP) or padded rounded backgrounds (chat inputs) matching `surface_level_2`.",
+    "Ensure all lists use `FlatList` with sensible `contentContainerStyle` paddings so items don't hit the screen edges."
+  ]
+}

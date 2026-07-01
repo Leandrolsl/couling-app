@@ -536,6 +536,74 @@ export async function listCalls() {
   });
 }
 
+// ---------- calls: live signaling helpers ----------
+export async function updateCallStatus(
+  callId: string,
+  status: "initiated" | "ringing" | "accepted" | "declined" | "ended",
+) {
+  const { error } = await supabase.from("calls").update({ status }).eq("id", callId);
+  if (error) throw error;
+}
+
+// Returns the OTHER party's profile for a given call (for the in-call header).
+export async function getCallPeer(callId: string) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: call } = await supabase
+    .from("calls")
+    .select("caller_id, callee_id, type")
+    .eq("id", callId)
+    .maybeSingle();
+  if (!call) return null;
+  const iAmCaller = call.caller_id === user.id;
+  const otherId = iAmCaller ? call.callee_id : call.caller_id;
+  const { data: ct } = await supabase
+    .from("contacts")
+    .select("display_name")
+    .eq("owner_id", user.id)
+    .eq("contact_user_id", otherId)
+    .maybeSingle();
+  const { data: prof } = await supabase
+    .from("profiles").select("name, avatar").eq("id", otherId).maybeSingle();
+  return {
+    id: otherId,
+    isCaller: iAmCaller,
+    type: call.type as "voice" | "video",
+    display_name: ct?.display_name || prof?.name || "Couling User",
+    avatar: prof?.avatar || "",
+  };
+}
+
+// Subscribe to incoming calls addressed to the current user (status = initiated).
+export async function subscribeIncomingCalls(onIncoming: (call: any) => void) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const channel = supabase
+    .channel(`incoming-calls:${user.id}`)
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "calls", filter: `callee_id=eq.${user.id}` },
+      async (payload: any) => {
+        const c = payload.new;
+        if (c.status !== "initiated") return;
+        const { data: prof } = await supabase
+          .from("profiles").select("name, avatar").eq("id", c.caller_id).maybeSingle();
+        const { data: ct } = await supabase
+          .from("contacts").select("display_name")
+          .eq("owner_id", user.id).eq("contact_user_id", c.caller_id).maybeSingle();
+        onIncoming({
+          call_id: c.id,
+          type: c.type,
+          caller_id: c.caller_id,
+          display_name: ct?.display_name || prof?.name || "Couling User",
+          avatar: prof?.avatar || "",
+        });
+      },
+    )
+    .subscribe();
+  return channel;
+}
+
 // ---------- meetings ----------
 function genMeetingCode(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";

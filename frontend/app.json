@@ -25,6 +25,20 @@
     },
     "plugins": [
       "expo-router",
+      "expo-dev-client",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Couling needs camera access for video calls.",
+          "microphonePermission": "Couling needs microphone access for calls."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": { "minSdkVersion": 24 }
+        }
+      ],
       [
         "expo-splash-screen",
         {

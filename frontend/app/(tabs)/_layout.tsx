@@ -6,6 +6,7 @@ import { Platform, StyleSheet, View } from "react-native";
 import { BlurView } from "expo-blur";
 import { colors, fonts } from "@/src/theme";
 import { heartbeat } from "@/src/api/supa";
+import { useIncomingCall } from "@/src/webrtc/useIncomingCall";
 
 function TabBg() {
   return (
@@ -18,6 +19,9 @@ function TabBg() {
 }
 
 export default function TabsLayout() {
+  // Listen for incoming calls anywhere in the app (logged-in area).
+  useIncomingCall();
+
   // Online/offline heartbeat — updates profiles.is_online + last_seen as user
   // foregrounds/backgrounds the app.
   React.useEffect(() => {

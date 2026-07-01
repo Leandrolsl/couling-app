@@ -45,8 +45,23 @@ meetings create/join/list/mute-all/end. Re-run: `cd /app/frontend && export $(gr
   Full signin->chats/calls/meetings e2e requires either disabling that setting (Supabase -> Auth -> Providers -> Email)
   or confirming via the emailed link. Supabase also rate-limits signups (~4/hr -> HTTP 429) and rejects fake domains (@couling.test -> 400).
 
+## Login model change (2026-07-01) — NAME + password (no email)
+- User enters unique **Name** + password. App maps name -> hidden synthetic email `slug(name)@couling.app`
+  (`usernameToEmail`, `signUpWithName`, `signInWithName` in src/api/supa.ts). Contacts added by **Name** (`addContactByName`).
+- Requires Supabase "Confirm email" = OFF (done). Verified live: /app/scripts/name_auth_test.mjs (6/6).
+
+## Phase 2 — Live 1:1 calls (WebRTC P2P, mobile-only) (2026-07-01)
+- Stack: `react-native-webrtc@124`, `@config-plugins/react-native-webrtc@15`, `expo-dev-client`, `expo-build-properties` (added to app.json plugins). STUN only (Google) in `src/webrtc/ice.ts` — ADD A TURN server there for reliable 4G/mobile connectivity.
+- Signaling over Supabase Realtime broadcast channel `call:<id>` (verified transport OK). Incoming calls via `subscribeIncomingCalls` (postgres_changes on `calls`), mounted in `app/(tabs)/_layout.tsx` via `useIncomingCall`.
+- Files: `src/webrtc/CallManager.native.ts` (real engine) / `CallManager.web.ts` (stub) / `.d.ts` shim; `src/webrtc/CallStage.native.tsx` (real UI w/ RTCView, mute/video/flip/hangup, incoming accept-decline) / `CallStage.web.tsx` (mobile-only notice); `app/call/[id].tsx` = thin wrapper. supa.ts: `updateCallStatus`, `getCallPeer`, `subscribeIncomingCalls`.
+- IMPORTANT: WebRTC is NATIVE-ONLY — does NOT run in Expo Go or the web preview. Web bundle stays clean (platform-split keeps react-native-webrtc out of web). CANNOT be auto-tested in this environment; needs a device.
+- To run/test on a phone (EAS dev build):
+  1) `cd /app/frontend`  2) `npm i -g eas-cli && eas login`  3) `eas build --profile development --platform android` (or ios)
+  4) install the dev build on the device, then `npx expo start --dev-client` and open it. Grant camera/mic permissions.
+  Two logged-in users on two devices: caller opens a contact -> Call; callee gets the incoming screen.
+
 ## Backlog / Next Actions
-- P1: After confirming a user (or disabling email confirmation), verify chats/calls/meetings + realtime end-to-end.
-- P2: Replace `Alert.alert` in `app/auth/profile.tsx` and `app/chat/[id].tsx` with inline UI (same RN-Web limitation).
-- P3: Bundle Ionicons font for web (alert-circle icon shows PUA glyph on first paint); migrate `shadow*`->`boxShadow`, `pointerEvents` prop->style to silence RN-Web deprecation warnings.
-- P3: Ship a production web build (or warm Metro on supervisor start) to remove first-request compile delay.
+- P0 (needs device): validate live 1:1 audio/video on two phones via EAS dev build; add a TURN server for non-Wi-Fi.
+- P1: Group calls inside Meetings (WebRTC mesh over the meeting realtime channel) — DEFERRED (much larger; untestable here).
+- P2: Replace `Alert.alert` in `app/auth/profile.tsx` and `app/chat/[id].tsx` with inline UI (RN-Web no-op).
+- P3: Ship a production web build (or warm Metro on start) to remove first-request compile delay; migrate `shadow*`->`boxShadow`.

@@ -30,19 +30,21 @@ async function main() {
     if (error) throw error;
     uidA = data.user.id;
     if (!data.session?.access_token) throw new Error("no session token");
+    A.realtime.setAuth(data.session.access_token);
     ok(`User A authenticated session issued (uid ${uidA.slice(0,8)})`);
   } catch (e) { bad("User A auth", e); return; }
   try {
     const { data, error } = await B.auth.signInAnonymously();
     if (error) throw error;
     uidB = data.user.id;
+    B.realtime.setAuth(data.session.access_token);
     ok(`User B authenticated session issued (uid ${uidB.slice(0,8)})`);
   } catch (e) { bad("User B auth", e); return; }
 
   // Email registration endpoint reachable (may be rate limited)
   try {
     const C = mk();
-    const { data, error } = await C.auth.signUp({ email: `reg.${ts}@couling.dev`, password: "secret123" });
+    const { data, error } = await C.auth.signUp({ email: `reg.${ts}@gmail.com`, password: "secret123" });
     if (error) {
       if (String(error.message).toLowerCase().includes("rate")) ok("Email signUp endpoint reachable (rate-limited 429 - expected)");
       else bad("Email signUp", error);

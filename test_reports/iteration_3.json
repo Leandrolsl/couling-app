@@ -1,0 +1,66 @@
+{
+  "summary": "Couling frontend/Supabase e2e verification (iter 3 in effective sequence — main agent said 'iteration_1' but iter_1 and iter_2 already exist from previous runs, so writing as iteration_3). PRIMARY BUG NOT REPRODUCIBLE with a warm Metro bundle: after clicking 'Enter the Circle' (data-testid=get-started-btn), the app navigates to /auth/email and the email form renders in <3s with the email-input/password-input/signin-btn visible. Deep-linking directly to /auth/email also renders instantly with no console errors, no page errors, and no failing/pending network requests. Splash '/' renders correctly. What was reported as a 'hang' is almost certainly Metro DEV-mode first-request bundling (observed 31s + 21s + 10s cascading compiles in supervisor logs on cold start; subsequent requests are 50-100ms). app.json already has web.output='single' and experiments.asyncRoutes=false so no per-route lazy chunk is being fetched. However, the SIGNUP flow does have real defects — see below.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "app/auth/email.tsx",
+        "issue": "All error/validation feedback uses React Native Alert.alert(), which does NOT render a visible/interactive dialog on react-native-web. When Supabase signUp/signIn fails (invalid domain, rate limit, invalid credentials, RLS reject), the button spinner just stops and the user is given ZERO feedback. Same platform limitation already flagged in iter_2 for chat/[id].tsx.",
+        "selector": "data-testid=signup-btn / data-testid=signin-btn",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Email signup",
+        "issue": "Supabase project has 'Confirm email' ENABLED. signUp('...@gmail.com','secret123') returns HTTP 200 with confirmation_sent_at set and data.session===null. The frontend then calls supabase.from('profiles').upsert(...) immediately in signUpWithEmail — with no active session this hits RLS and rejects. The rejection is caught and shown via Alert.alert (invisible on web). Result: user silently stranded on /auth/email. Fix EITHER: (a) disable 'Confirm email' in Supabase Auth Providers, OR (b) in signUpWithEmail(), if (!data.session) short-circuit — skip profiles.upsert and route to a 'Check your inbox' screen.",
+        "affected_selectors": ["[data-testid=signup-btn]", "[data-testid=signin-btn]"]
+      },
+      {
+        "flow": "Email signup with @couling.test",
+        "issue": "Supabase rejects @couling.test with HTTP 400 — domain not on allowlist. The suggested test credential 'tester+<ts>@couling.test' from /app/memory/test_credentials.md will NEVER succeed. Rapid retries hit HTTP 429 'over_email_send_rate_limit' (~4/hour on default Supabase).",
+        "affected_selectors": ["[data-testid=signup-btn]"]
+      },
+      {
+        "flow": "Email signin right after signup",
+        "issue": "Because email confirmation is required, POST /auth/v1/token?grant_type=password returns 400 'invalid_credentials' until the user clicks the confirmation link. There is no auto-verify / dev-bypass. Full e2e signup→profile→(tabs)/chats CANNOT be exercised without either turning off email confirmation OR seeding a pre-confirmed user via Supabase admin API.",
+        "affected_selectors": ["[data-testid=signin-btn]"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "global",
+        "issues": [
+          "react-native-web deprecation warnings: 'shadow* style props are deprecated. Use boxShadow' and 'props.pointerEvents is deprecated. Use style.pointerEvents'. Cosmetic only."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "PRIORITY 1 — Fix silent signup failure: EITHER disable 'Confirm email' in Supabase (Auth → Providers → Email) so signUp returns a session, OR update src/api/supa.ts::signUpWithEmail() to check `if (!data.session) return { needsConfirmation: true }` (skip profiles.upsert) and update app/auth/email.tsx to show a 'Check your inbox to verify' screen.",
+    "PRIORITY 1 — Replace Alert.alert() calls in app/auth/email.tsx (lines 33, 37, 52) with an in-app <Modal>/inline-error component. Alert.alert is a no-op on react-native-web so users see zero feedback on auth errors.",
+    "PRIORITY 2 — Update /app/memory/test_credentials.md: 'tester+<ts>@couling.test' is rejected by Supabase with 400. Use real domains (or whitelist couling.test in Supabase Auth settings).",
+    "PRIORITY 3 — The reported '/auth/email hangs on gold spinner then goes blank' could NOT be reproduced after Metro warmed up. Root cause of the hang was almost certainly first-request Metro DEV bundling (31s+21s+10s in supervisor logs). Consider warming the bundle on supervisor start with a curl, or shipping a production web build.",
+    "PRIORITY 3 — Migrate shadow* → boxShadow and pointerEvents prop → style.pointerEvents to silence RN-Web deprecation warnings."
+  ],
+  "critical_code_review_comments": [
+    "src/api/supa.ts::signUpWithEmail — does supabase.auth.signUp then immediately supabase.from('profiles').upsert(). If email confirmation is on, this upsert runs UNAUTHENTICATED and RLS rejects. Needs a `if (!data.session)` short-circuit + a 'check inbox' UI.",
+    "app/auth/email.tsx onSubmit — three Alert.alert() calls silently no-op on react-native-web. All auth error surfaces are invisible on web preview.",
+    "app/index.tsx session-probe is well-guarded (2s Promise.race + 2.5s hard-ceiling fallback). Handles no-session case correctly, splash+CTA renders in <3s.",
+    "app/_layout.tsx font-load is non-blocking with 1.5s ceiling — good. Stack animation='none' eliminates the flash-of-spinner between routes.",
+    "app.json has experiments.asyncRoutes=false + web.output='single' — correct; no lazy route chunks, so 'hanging chunk' hypothesis is ruled out.",
+    "public/index.html #root height reset already in place — root element measured 900px height, no zero-height container issue."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (not tested this iteration)",
+    "frontend": "Splash render: PASS. get-started-btn → /auth/email navigation: PASS. Deep-link /auth/email: PASS. email-input / password-input / signin-btn / signup-btn / toggle-auth-mode-btn / back-btn render + testIDs: PASS. E2E signup→profile→chats: BLOCKED by Supabase email-confirmation requirement."
+  },
+  "test_credentials": "Signup attempted with couling.tester.<ts>@gmail.com / secret123 — Supabase returned 200 with session=null (confirmation required). Sign-in with same creds returned 400 invalid_credentials. Cannot complete e2e without disabling Supabase 'Confirm email' or admin-seeding a pre-confirmed user.",
+  "seed_data_creation": "None. One unconfirmed user (couling.tester.1782884275@gmail.com) created in the Supabase project — will remain unverified.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Preview URL: https://e3fb73a8-1544-4e40-90e0-67885db05854.preview.emergentagent.com. Supabase URL: https://ndyxypvzcqazzccbilns.supabase.co. Metro DEV bundle takes ~30-40s on first request per fresh supervisor restart — always warm the bundle first. IMPORTANT for signup testing: Supabase project has 'Confirm email' ENABLED so new users cannot sign in until they verify. Do NOT use @couling.test — Supabase rejects it 400. Use gmail.com/example.com. Rapid signup retries hit 429 rate limit. Alert.alert is INVISIBLE on react-native-web so absence of a dialog does NOT mean success — always check Supabase network response and page URL.",
+  "rca_of_issue": "PRIMARY REPORTED BUG (/auth/email hangs on gold spinner then blank): NOT REPRODUCIBLE with warm bundle. Root cause was Metro DEV-mode first-request bundling latency (31s+21s+10s cascading compiles in /var/log/supervisor/frontend.out.log). The screen renders in <3s once bundled. No hanging chunks, no zero-height container, no JS runtime errors. Mitigation: warm the bundle at supervisor start OR ship a production web build. SECONDARY BUG (silent signup failure): Supabase project requires email confirmation → signUp returns 200 with session=null → signUpWithEmail calls profiles.upsert() unauthenticated → RLS rejects → error caught by Alert.alert → Alert.alert is a no-op on react-native-web → user sees no error, no navigation, spinner just stops. Reproduction: click get-started-btn → toggle to signup → fill any real-domain email + 6-char password → click Create Account → URL stays on /auth/email and no dialog appears. Network shows 200 on /auth/v1/signup with confirmation_sent_at set. Mitigation: turn off Supabase email confirmation, OR add !data.session branch in signUpWithEmail that returns needsConfirmation and routes to a 'check your inbox' screen; separately, replace Alert.alert with a Modal-based error surface."
+}

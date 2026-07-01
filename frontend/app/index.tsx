@@ -13,25 +13,26 @@ export default function Index() {
 
   useEffect(() => {
     let cancelled = false;
-    const fallback = setTimeout(() => {
-      if (!cancelled) setChecking(false);
-    }, 4000);
+    const done = () => { if (!cancelled) setChecking(false); };
+    // Hard ceiling: never let the session probe block the UI for >2.5s.
+    const fallback = setTimeout(done, 2500);
 
     (async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const sessionProbe = supabase.auth.getSession();
+        const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
+        const result: any = await Promise.race([sessionProbe, timeout]);
+        const session = result?.data?.session ?? null;
         if (!session) return;
         const profile = await getCurrentProfile();
         if (cancelled) return;
         if (profile?.name) router.replace("/(tabs)/chats");
         else router.replace("/auth/profile");
-      } catch {
-        // session invalid or network issue, fall through
+      } catch (e) {
+        console.log("[Couling] session probe error", String(e));
       } finally {
-        if (!cancelled) {
-          clearTimeout(fallback);
-          setChecking(false);
-        }
+        clearTimeout(fallback);
+        done();
       }
     })();
 

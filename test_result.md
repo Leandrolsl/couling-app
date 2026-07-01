@@ -101,3 +101,64 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Restore Couling app from GitHub branch conflict_180526_1519, merge into main, keep all Couling functionality (auth, chat, call, meeting, test_couling.py), fix merge conflicts, run end-to-end."
+
+backend:
+  - task: "Couling FastAPI backend (auth OTP, contacts, chats, calls, meetings)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "Merged from conflict_180526_1519. Backend online at /api. pytest tests/test_couling.py = 21 passed; tests/test_message_management.py = 13 passed, 1 skipped. NOTE: this FastAPI backend is legacy and NOT wired to the current UI (UI uses Supabase)."
+
+frontend:
+  - task: "Couling Expo (React Native Web) app boots and splash renders"
+    implemented: true
+    working: true
+    file: "app/index.tsx, public/index.html"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "Fixed RNW root height collapse (added height reset to public/index.html) and a hanging supabase.auth.getSession() gate (added Promise.race 2s timeout). Splash '/' renders fully with hero art + gold 'Enter the Circle' button."
+  - task: "Navigate to /auth/email and complete Supabase email signup -> profile -> chats"
+    implemented: true
+    working: "NA"
+    file: "app/auth/email.tsx, app/_layout.tsx, app/auth/profile.tsx, src/api/supa.ts"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "When clicking 'Enter the Circle' (get-started-btn) or deep-linking /auth/email, the route shows a spinner then blank; email-input never appears. No JS console error observed. Tried: set experiments.asyncRoutes=false in app.json, set Stack animation to 'none'. Could not confirm fix via screenshot tool (it does not surface logs/injected overlays). Needs testing agent with console+network capture to pinpoint whether a lazy chunk/request hangs or the screen renders with zero height."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 0
+  run_ui: true
+
+test_plan:
+  current_focus:
+    - "Navigate to /auth/email and complete Supabase email signup -> profile -> chats"
+  stuck_tasks:
+    - "Navigate to /auth/email and complete Supabase email signup -> profile -> chats"
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    -agent: "main"
+    -message: "This is an Expo React Native Web app (runs via expo start --web on port 3000) with a Supabase backend (keys in frontend/.env; DB tables already exist). Splash renders. The blocker is navigating past the splash to the email auth screen — it hangs on a spinner/blank with NO visible JS error. Please open the preview URL, wait for the splash (gold 'Enter the Circle'), click data-testid=get-started-btn, and report EXACTLY what happens on /auth/email with full browser console AND network logs (look for any pending/failed request or chunk). Then, if it renders, complete signup via data-testid email-input/password-input/signup-btn (toggle-auth-mode-btn to switch to signup), set profile name, and verify the (tabs) chats screen loads. Phone/SMS OTP is intentionally 'coming soon' - use EMAIL."
+
+#====================================================================================================
+# Old Testing Data
+#====================================================================================================

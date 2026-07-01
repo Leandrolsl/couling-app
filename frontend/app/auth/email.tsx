@@ -15,14 +15,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors, fonts, spacing, radius } from "@/src/theme";
 import GoldButton from "@/src/components/GoldButton";
 import Screen from "@/src/components/Screen";
-import { signInWithEmail, signUpWithEmail, getCurrentProfile } from "@/src/api/supa";
+import { signInWithName, signUpWithName, getCurrentProfile } from "@/src/api/supa";
 
 type Mode = "signin" | "signup";
 
 export default function EmailAuth() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("signin");
-  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -32,9 +32,9 @@ export default function EmailAuth() {
   const onSubmit = async () => {
     setError(null);
     setNotice(null);
-    const e = email.trim().toLowerCase();
-    if (!e || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
-      setError("Enter a valid email address.");
+    const n = name.trim();
+    if (n.length < 2) {
+      setError("Enter your name (at least 2 characters).");
       return;
     }
     if (password.length < 6) {
@@ -44,17 +44,17 @@ export default function EmailAuth() {
     setLoading(true);
     try {
       if (mode === "signup") {
-        const res = await signUpWithEmail(e, password);
+        const res = await signUpWithName(n, password);
         if (res.needsConfirmation) {
           setMode("signin");
           setPassword("");
           setNotice(
-            "Account created. Check your inbox to confirm your email, then sign in.",
+            "Account created — but this project still requires email confirmation. Ask the owner to turn it off, then sign in.",
           );
           return;
         }
       } else {
-        await signInWithEmail(e, password);
+        await signInWithName(n, password);
       }
       const profile = await getCurrentProfile();
       if (!profile?.name) router.replace("/auth/profile");
@@ -99,23 +99,23 @@ export default function EmailAuth() {
           </Text>
           <Text style={styles.subtitle}>
             {mode === "signup"
-              ? "Sign up with email. We'll never share it. Phone/SMS login is coming soon."
-              : "Sign in with the email you used to enter Couling."}
+              ? "Pick a unique name and a password. No email, no phone number."
+              : "Sign in with the name and password you chose."}
           </Text>
 
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>Name</Text>
           <View style={styles.inputWrap}>
-            <Ionicons name="mail-outline" size={18} color={colors.gold} />
+            <Ionicons name="person-outline" size={18} color={colors.gold} />
             <TextInput
-              testID="email-input"
+              testID="name-input"
               style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
               autoCorrect={false}
-              placeholder="you@private.club"
+              placeholder="e.g. Midnight Fox"
               placeholderTextColor={colors.textDim}
+              maxLength={32}
             />
           </View>
 
@@ -148,7 +148,7 @@ export default function EmailAuth() {
           <View style={styles.notice}>
             <Ionicons name="shield-checkmark" size={14} color={colors.gold} />
             <Text style={styles.noticeText}>
-              End-to-end secured. Your email is never shown to your Circle.
+              End-to-end secured. Your name is how your Circle finds you — no phone number needed.
             </Text>
           </View>
 
@@ -196,10 +196,10 @@ export default function EmailAuth() {
           </TouchableOpacity>
 
           <View style={styles.futureCard}>
-            <Ionicons name="time-outline" size={14} color={colors.gold} />
+            <Ionicons name="lock-closed" size={14} color={colors.gold} />
             <Text style={styles.futureText}>
-              <Text style={{ color: colors.gold }}>Coming soon · </Text>
-              Sign in with phone number (one-time SMS code).
+              <Text style={{ color: colors.gold }}>Private by design · </Text>
+              Only your chosen name is visible — never your identity.
             </Text>
           </View>
         </ScrollView>

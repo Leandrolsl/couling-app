@@ -94,6 +94,59 @@ export async function signInWithEmail(email: string, password: string) {
   return user;
 }
 
+// ---------- name + password auth (login uses a hidden synthetic email) ----------
+export const AUTH_EMAIL_DOMAIN = "couling.app";
+
+export function usernameToEmail(name: string): { slug: string; email: string } {
+  const slug = (name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/\.{2,}/g, ".")
+    .replace(/^\.+|\.+$/g, "");
+  return { slug, email: slug ? `${slug}@${AUTH_EMAIL_DOMAIN}` : "" };
+}
+
+export async function signUpWithName(name: string, password: string) {
+  const trimmed = (name || "").trim();
+  const { slug, email } = usernameToEmail(trimmed);
+  if (!slug) throw new Error("Choose a name with letters or numbers.");
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) {
+    if (/already registered|already exists|already been registered/i.test(error.message))
+      throw new Error("That name is already taken. Try another.");
+    throw error;
+  }
+  const user = data.user;
+  if (!user) throw new Error("Sign-up failed. Please try again.");
+  if (!data.session) return { user, needsConfirmation: true as const };
+  await supabase.from("profiles").upsert(
+    { id: user.id, email, name: trimmed, is_online: true, last_seen: new Date().toISOString() },
+    { onConflict: "id" },
+  );
+  return { user, needsConfirmation: false as const };
+}
+
+export async function signInWithName(name: string, password: string) {
+  const trimmed = (name || "").trim();
+  const { slug, email } = usernameToEmail(trimmed);
+  if (!slug) throw new Error("Enter your name.");
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    if (/invalid login credentials/i.test(error.message))
+      throw new Error("Wrong name or password.");
+    throw error;
+  }
+  const user = data.user;
+  if (!user) throw new Error("Sign-in failed.");
+  await supabase.from("profiles").upsert(
+    { id: user.id, email, name: trimmed, is_online: true, last_seen: new Date().toISOString() },
+    { onConflict: "id" },
+  );
+  return user;
+}
+
 // ---------- phone auth (FUTURE — placeholder so screens compile) ----------
 export async function startPhoneOtp(_phone: string): Promise<void> {
   throw new Error("Phone/SMS login is coming soon — please use email for now.");
@@ -160,6 +213,30 @@ export async function addContactByEmail(email: string, displayName: string) {
   }
   if (targetRow.id === user.id) throw new Error("Cannot add yourself");
 
+  const { error } = await supabase.from("contacts").insert({
+    owner_id: user.id,
+    contact_user_id: targetRow.id,
+    display_name: displayName,
+  });
+  if (error) {
+    if (error.code === "23505") throw new Error("Already in your Circle");
+    throw error;
+  }
+}
+
+export async function addContactByName(name: string, displayName: string) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { slug, email } = usernameToEmail(name);
+  if (!slug) throw new Error("Enter a valid name.");
+  const { data: targetRow, error: lookupErr } = await supabase
+    .from("profiles")
+    .select("id, email")
+    .eq("email", email)
+    .maybeSingle();
+  if (lookupErr) throw lookupErr;
+  if (!targetRow) throw new Error("No Couling user found with that name. Ask them to join.");
+  if (targetRow.id === user.id) throw new Error("Cannot add yourself");
   const { error } = await supabase.from("contacts").insert({
     owner_id: user.id,
     contact_user_id: targetRow.id,

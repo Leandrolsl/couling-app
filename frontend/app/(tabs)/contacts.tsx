@@ -20,7 +20,7 @@ import GoldButton from "@/src/components/GoldButton";
 import HiddenNumberBadge from "@/src/components/HiddenNumberBadge";
 import {
   listContacts as supaListContacts,
-  addContactByEmail,
+  addContactByName,
   startChatWithContact,
   initiateCall,
 } from "@/src/api/supa";
@@ -30,7 +30,7 @@ export default function ContactsTab() {
   const [items, setItems] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
-  const [emailValue, setEmailValue] = useState("");
+  const [nameValue, setNameValue] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -44,14 +44,14 @@ export default function ContactsTab() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const onAdd = async () => {
-    const e = emailValue.trim().toLowerCase();
-    if (!e || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return Alert.alert("Couling", "Enter a valid email");
+    const n = nameValue.trim();
+    if (n.length < 2) return Alert.alert("Couling", "Enter their name");
     if (!displayName.trim()) return Alert.alert("Couling", "Give them a display name");
     setLoading(true);
     try {
-      await addContactByEmail(e, displayName.trim());
+      await addContactByName(n, displayName.trim());
       setShowAdd(false);
-      setEmailValue(""); setDisplayName("");
+      setNameValue(""); setDisplayName("");
       load();
     } catch (err: any) {
       Alert.alert("Couling", err.message);
@@ -174,23 +174,23 @@ export default function ContactsTab() {
           <View style={styles.modalCard}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalEyebrow}>EXPAND CIRCLE</Text>
-            <Text style={styles.modalTitle}>Add by email</Text>
+            <Text style={styles.modalTitle}>Add by name</Text>
             <Text style={styles.modalNote}>
-              We use email to find them on Couling, but it's <Text style={{ color: colors.gold }}>never shown</Text> to anyone in your Circle — only the display name you pick.
+              Enter their exact Couling <Text style={{ color: colors.gold }}>name</Text>. Then pick a display name only you will see.
             </Text>
 
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>Their Name</Text>
             <View style={styles.inputWrap}>
               <TextInput
-                testID="add-email-input"
-                value={emailValue}
-                onChangeText={setEmailValue}
-                placeholder="them@private.club"
+                testID="add-name-input"
+                value={nameValue}
+                onChangeText={setNameValue}
+                placeholder="e.g. Midnight Fox"
                 placeholderTextColor={colors.textDim}
                 style={styles.input}
-                keyboardType="email-address"
-                autoCapitalize="none"
+                autoCapitalize="words"
                 autoCorrect={false}
+                maxLength={32}
               />
             </View>
 

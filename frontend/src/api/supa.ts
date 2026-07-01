@@ -52,7 +52,13 @@ export async function signUpWithEmail(email: string, password: string) {
   });
   if (error) throw error;
   const user = data.user;
-  if (!user) throw new Error("Sign-up succeeded but no user returned. Check email confirmation settings.");
+  if (!user) throw new Error("Sign-up failed. Please try again.");
+  // When the Supabase project requires email confirmation, no session is
+  // returned yet — we cannot write the profile row (RLS needs an authed user).
+  // The profile is bootstrapped on first sign-in instead (see signInWithEmail).
+  if (!data.session) {
+    return { user, needsConfirmation: true as const };
+  }
   // Bootstrap profile row (id == auth user id)
   const { error: upErr } = await supabase.from("profiles").upsert(
     {
@@ -64,7 +70,7 @@ export async function signUpWithEmail(email: string, password: string) {
     { onConflict: "id" },
   );
   if (upErr) throw upErr;
-  return user;
+  return { user, needsConfirmation: false as const };
 }
 
 export async function signInWithEmail(email: string, password: string) {

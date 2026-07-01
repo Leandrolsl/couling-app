@@ -26,21 +26,33 @@ export default function EmailAuth() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const onSubmit = async () => {
+    setError(null);
+    setNotice(null);
     const e = email.trim().toLowerCase();
     if (!e || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
-      Alert.alert("Couling", "Enter a valid email address.");
+      setError("Enter a valid email address.");
       return;
     }
     if (password.length < 6) {
-      Alert.alert("Couling", "Password must be at least 6 characters.");
+      setError("Password must be at least 6 characters.");
       return;
     }
     setLoading(true);
     try {
       if (mode === "signup") {
-        await signUpWithEmail(e, password);
+        const res = await signUpWithEmail(e, password);
+        if (res.needsConfirmation) {
+          setMode("signin");
+          setPassword("");
+          setNotice(
+            "Account created. Check your inbox to confirm your email, then sign in.",
+          );
+          return;
+        }
       } else {
         await signInWithEmail(e, password);
       }
@@ -49,13 +61,15 @@ export default function EmailAuth() {
       else router.replace("/(tabs)/chats");
     } catch (err: any) {
       const msg = err?.message || "Authentication failed";
-      Alert.alert("Couling", msg);
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
   const toggleMode = () => {
+    setError(null);
+    setNotice(null);
     setMode((m) => (m === "signin" ? "signup" : "signin"));
   };
 
@@ -137,6 +151,20 @@ export default function EmailAuth() {
               End-to-end secured. Your email is never shown to your Circle.
             </Text>
           </View>
+
+          {error ? (
+            <View style={styles.errorBox} testID="auth-error">
+              <Ionicons name="alert-circle" size={16} color={colors.error} />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
+          {notice ? (
+            <View style={styles.infoBox} testID="auth-notice">
+              <Ionicons name="mail-unread-outline" size={16} color={colors.gold} />
+              <Text style={styles.infoText}>{notice}</Text>
+            </View>
+          ) : null}
 
           <View style={{ marginTop: spacing.xl }}>
             <GoldButton
@@ -255,6 +283,42 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: 12,
     flex: 1,
+  },
+  errorBox: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    backgroundColor: "rgba(255, 77, 77, 0.10)",
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(255, 77, 77, 0.35)",
+  },
+  errorText: {
+    flex: 1,
+    color: colors.error,
+    fontFamily: fonts.bodyMed,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  infoBox: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    backgroundColor: colors.goldDim,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(212, 164, 55, 0.35)",
+  },
+  infoText: {
+    flex: 1,
+    color: colors.text,
+    fontFamily: fonts.bodyMed,
+    fontSize: 13,
+    lineHeight: 18,
   },
   toggleRow: {
     alignSelf: "center",

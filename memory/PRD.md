@@ -1,51 +1,40 @@
-# Couling — Product Requirements Document
+# Couling — PRD & Project Memory
 
-## Vision
-Couling is a premium private communication platform — the discreet way to message, call, and host meetings without ever revealing your phone number. Think WhatsApp + Zoom + Discord, reimagined as a private club with dark, gold-mustard luxury aesthetics.
+## Original Problem Statement
+Restore the Couling project from the GitHub branch `conflict_180526_1519` (github.com/Leandrolsl/couling-app).
+This branch holds the original Couling app (test_couling.py, auth, chat, call, meeting modules).
+Merge it into `main` without replacing it with any unrelated project. Keep all Couling functionality,
+fix merge conflicts, and run it end-to-end.
 
-## Core Principles
-- **Numbers are sacred.** A phone number is used once to verify identity, then disappears from every surface forever.
-- **Connection is consent.** You only appear in someone's Circle if they already know your phone — and once added, the number is erased from view.
-- **Exclusivity by design.** Dark theme, gold accents (#D4A437), serif headings — feels like a private club, not a generic messenger.
+## Architecture
+- **Frontend**: Expo (React Native Web), expo-router. Served via `expo start --web --port 3000` (supervisor `frontend`).
+  - Data layer = **Supabase** (email/password auth + realtime chat/meetings) via `src/api/supa.ts` + `src/lib/supabase.ts`.
+  - Screens: splash (`app/index.tsx`), auth (email/otp/phone/profile), tabs (chats/calls/contacts/meetings/profile), chat/[id], call/[id], meeting/[id].
+  - Theme: dark + gold ("private protocol" aesthetic), Cormorant Garamond + Outfit fonts.
+- **Backend (legacy)**: FastAPI + MongoDB (`backend/server.py`, port 8001). Full Couling API (auth OTP, contacts, chats, calls, meetings) + `tests/test_couling.py`. NOT wired to the current UI (kept for parity/tests).
+- Env: `frontend/.env` (EXPO_PUBLIC_BACKEND_URL, EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY); `backend/.env` (MONGO_URL, DB_NAME, CORS_ORIGINS).
 
-## Feature Set (v1.0 — Shipped)
-1. **SMS OTP onboarding** — Phone entry → 6-digit code → Display name + emblem (mock OTP `123456` for MVP; Twilio swap-in ready).
-2. **The Circle (Contacts)** — Add by phone; number is replaced with a `Hidden` lock badge immediately on add.
-3. **Private Chats** — 1:1 messaging with gold-bordered sender bubbles, auto-polling, optimistic send.
-4. **Voice & Video Calls** — Animated call screens with mute / speaker / video toggle / end. Backend logs every call.
-5. **Group Meetings** — Create with shareable code (XXX-XXX-XXX); join by code. Organizer controls:
-   - Mute all participants
-   - Start a Private Talk with selected members (side-bar within the meeting)
-   - End meeting for everyone
-6. **Profile & Privacy** — Hidden-number toggle (locked on), encryption toggle, read receipts, member tier.
+## Restore/Merge (done 2026-07-01)
+- Cloned repo, merged `origin/conflict_180526_1519` into `main` with `--allow-unrelated-histories`.
+- Resolved all 11 add/add conflicts in favor of the Couling branch; kept main-only files (pytest.ini, test_result.md, etc).
+- Synced merged tree into /app (preserved .git/.emergent, excluded 138M .metro-cache).
 
-## Tech Stack
-- **Frontend:** Expo SDK 54, expo-router, expo-blur, Cormorant Garamond + Outfit (Google Fonts).
-- **Backend:** FastAPI + MongoDB (motor), `/api` prefix, Bearer token auth.
-- **Design tokens:** Dark luxury archetype, #D4A437 gold accent.
+## Implemented / Verified
+- Backend online (`/api` -> {"app":"Couling","status":"online"}). **pytest: test_couling.py 21 passed; test_message_management.py 13 passed, 1 skipped.**
+- Frontend boots end-to-end: splash -> email auth -> Supabase. Fixed:
+  - RNW root height collapse (added height reset to `public/index.html`).
+  - Hanging `supabase.auth.getSession()` gate (Promise.race 2s timeout in `index.tsx`).
+  - `app.json experiments.asyncRoutes=false` + Stack `animation:"none"` (route stability).
+  - Signup UX: `Alert.alert` (invisible on RN-Web) replaced with inline `auth-error`/`auth-notice` banners; `signUpWithEmail` handles email-confirmation (skips RLS-blocked profile upsert, shows "check your inbox").
+- The perceived "/auth/email hang" was Metro DEV cold-compile latency (~30-40s first request), not a bug.
 
-## Mocked / Future Integrations
-- **MOCKED:** SMS OTP (universal demo code `123456`) — swap for Twilio.
-- **MOCKED:** Voice/video streaming (UI only) — swap for Agora / LiveKit / Daily.
-- **MOCKED:** E2E encryption (badge/copy only) — swap for libsignal-style protocol; transport is TLS today.
+## Known External Blocker
+- Supabase project has **"Confirm email" ENABLED** -> new users can't sign in until they confirm.
+  Full signin->chats/calls/meetings e2e requires either disabling that setting (Supabase -> Auth -> Providers -> Email)
+  or confirming via the emailed link. Supabase also rate-limits signups (~4/hr -> HTTP 429) and rejects fake domains (@couling.test -> 400).
 
-## Smart Business Enhancement
-**Founding Members Tier** — Every new signup is automatically marked `Founding · Gold` in their profile. This sets up future tier-gating (premium meeting durations, custom emblems, exclusive invites) and creates an immediate sense of exclusivity that drives early-adopter virality.
-
-## Key API Surface
-| Endpoint | Purpose |
-|---|---|
-| POST `/api/auth/send-otp` | Send demo OTP |
-| POST `/api/auth/verify-otp` | Verify + issue Bearer token |
-| POST `/api/auth/profile` | Set display name + emblem |
-| GET `/api/me` | Current user |
-| POST `/api/contacts/add` | Add to Circle (phone hidden after) |
-| GET `/api/contacts` | Circle list (no phones) |
-| POST `/api/chats/start` | Start/get 1:1 chat |
-| GET/POST `/api/chats/{id}/messages` | Message stream |
-| POST `/api/calls/initiate` | Log a call |
-| POST `/api/meetings` | Host a meeting |
-| POST `/api/meetings/join` | Join by code |
-| POST `/api/meetings/{id}/mute-all` | Organizer only |
-| POST `/api/meetings/{id}/private-talk` | Organizer only |
-| POST `/api/meetings/{id}/end` | Organizer only |
+## Backlog / Next Actions
+- P1: After confirming a user (or disabling email confirmation), verify chats/calls/meetings + realtime end-to-end.
+- P2: Replace `Alert.alert` in `app/auth/profile.tsx` and `app/chat/[id].tsx` with inline UI (same RN-Web limitation).
+- P3: Bundle Ionicons font for web (alert-circle icon shows PUA glyph on first paint); migrate `shadow*`->`boxShadow`, `pointerEvents` prop->style to silence RN-Web deprecation warnings.
+- P3: Ship a production web build (or warm Metro on supervisor start) to remove first-request compile delay.

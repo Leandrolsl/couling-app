@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import axios from "axios";
-import { HOME } from "@/constants/testIds";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -25,7 +24,6 @@ const Home = () => {
     <div>
       <header className="App-header">
         <a
-          data-testid={HOME.emergentLink}
           className="App-link"
           href="https://emergent.sh"
           target="_blank"

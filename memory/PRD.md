@@ -28,6 +28,18 @@ fix merge conflicts, and run it end-to-end.
   - Signup UX: `Alert.alert` (invisible on RN-Web) replaced with inline `auth-error`/`auth-notice` banners; `signUpWithEmail` handles email-confirmation (skips RLS-blocked profile upsert, shows "check your inbox").
 - The perceived "/auth/email hang" was Metro DEV cold-compile latency (~30-40s first request), not a bug.
 
+## Supabase schema alignment (2026-07-01)
+The live Supabase project schema was OUT OF SYNC with the app. Applied migrations (via SQL Editor):
+- `0003_align_schema.sql` — dropped/recreated the 6 app tables to match `supa.ts` + RLS + realtime.
+- `0004_fix_signup_trigger.sql` — replaced the broken `auth.users`->profiles trigger with a SECURITY DEFINER `handle_new_user()` (fixed HTTP 500 on every signup).
+- `0005_meeting_join_policy.sql` — relaxed meetings UPDATE `USING` so new users can join (WITH CHECK still requires membership).
+
+## FULL E2E VERIFIED (2026-07-01) — 23/23 passed
+Script: `/app/scripts/couling_e2e_test.mjs` (two authenticated Supabase sessions vs the LIVE project).
+Verified: auth/registration (anon sessions + email signUp 200 needsConfirmation), profiles+RLS, add-contact-by-email,
+chat create + **live realtime message delivery** + cross-user RLS read + delete-for-everyone, voice calls (both logs),
+meetings create/join/list/mute-all/end. Re-run: `cd /app/frontend && export $(grep EXPO_PUBLIC_SUPABASE ../frontend/.env | xargs) && node /app/scripts/couling_e2e_test.mjs`.
+
 ## Known External Blocker
 - Supabase project has **"Confirm email" ENABLED** -> new users can't sign in until they confirm.
   Full signin->chats/calls/meetings e2e requires either disabling that setting (Supabase -> Auth -> Providers -> Email)
